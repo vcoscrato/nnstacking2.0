@@ -3,7 +3,7 @@ import os
 import warnings
 import pandas as pd
 from sklearn.exceptions import DataConversionWarning
-from NNS.Implementation.Applications_beckend import apply, apply2
+from Implementation.Applications_beckend import apply, apply2
 from sklearn.linear_model import LinearRegression, LassoCV, RidgeCV
 from sklearn.ensemble import BaggingRegressor, RandomForestRegressor, GradientBoostingRegressor
 from sklearn.model_selection import GridSearchCV
