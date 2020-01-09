@@ -14,7 +14,7 @@ if __name__ == '__main__':
     x = data.iloc[:, range(0, data.shape[1] - 1)].values
     y = data.iloc[:, -1].values
 
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=1 / 4, random_state=0)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=1/4, random_state=0)
 
     with open('nnsm3', 'rb') as f:
         nne = pickle.load(f)
