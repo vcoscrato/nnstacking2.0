@@ -1,0 +1,20 @@
+\begin{tabular}{lrrrr}
+\toprule
+{} &  UNNS+φ(x) &  CNNS+φ(x) &  UNNS &  CNNS \\
+\midrule
+UNNS+φ(x)                  &        nan &       0.00 &  1.00 &  0.00 \\
+CNNS+φ(x)                  &       1.00 &        nan &  1.00 &  0.50 \\
+UNNS                       &       0.00 &       0.00 &   nan &  0.00 \\
+CNNS                       &       1.00 &       0.50 &  1.00 &   nan \\
+Breiman’s stacking         &       0.00 &       0.00 &  1.00 &  0.00 \\
+Meta-regression neural net &       0.00 &       0.00 &  1.00 &  0.00 \\
+Direct neural net          &       0.00 &       0.00 &  0.00 &  0.00 \\
+Least squares              &       0.00 &       0.00 &  1.00 &  0.00 \\
+Lasso                      &       0.00 &       0.00 &  1.00 &  0.00 \\
+Ridge                      &       0.00 &       0.00 &  1.00 &  0.00 \\
+Bagging                    &       0.00 &       0.00 &  1.00 &  0.00 \\
+Random forest              &       0.00 &       0.00 &  1.00 &  0.00 \\
+Gradient boosting          &       0.04 &       0.00 &  1.00 &  0.00 \\
+\bottomrule
+\end{tabular}
+
