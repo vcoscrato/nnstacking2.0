@@ -25,15 +25,14 @@ from sklearn.base import BaseEstimator
 from sklearn.model_selection import ShuffleSplit
 from copy import deepcopy
 from torch.optim import Adamax as optimm
+import attrs
 
 
+
+from typing import Optional
+
+@attrs.define
 class NNPredict(BaseEstimator):
-    @staticmethod
-    def _numpy_to_tensor(arr):
-        arr = np.array(arr, dtype="f4")
-        arr = torch.from_numpy(arr)
-        return arr
-
     """
     Regression estimation using neural networks
 
@@ -82,36 +81,55 @@ class NNPredict(BaseEstimator):
         Level verbosity. Set to 0 for silent mode.
     """
 
-    def __init__(
-        self,
-        nn_weight_decay=0,
-        num_layers=10,
-        hidden_size=100,
-        convolutional=False,
-        es=True,
-        es_validation_set_size=None,
-        es_give_up_after_nepochs=50,
-        es_splitter_random_state=0,
-        nepoch=200,
-        batch_initial=300,
-        batch_step_multiplier=1.4,
-        batch_step_epoch_expon=2.0,
-        batch_max_size=1000,
-        dataloader_workers=1,
-        optim_lr=1e-3,
-        batch_test_size=2000,
-        device=None,
-        verbose=1,
-    ):
-        for prop in dir():
-            if prop != "self":
-                setattr(self, prop, locals()[prop])
-        self.device = device
+    nn_weight_decay: float = attrs.field(default=0.0, validator=attrs.validators.ge(0))
+    num_layers: int = attrs.field(default=10, validator=attrs.validators.ge(0))
+    hidden_size: int = attrs.field(default=100, validator=attrs.validators.gt(0))
+    convolutional: bool = False
+    es: bool = True
+    es_validation_set_size: Optional[int] = attrs.field(
+        default=None, validator=attrs.validators.optional(attrs.validators.gt(0))
+    )
+    es_give_up_after_nepochs: int = attrs.field(
+        default=50, validator=attrs.validators.gt(0)
+    )
+    es_splitter_random_state: int = 0
+    nepoch: int = attrs.field(default=200, validator=attrs.validators.ge(0))
+    batch_initial: int = attrs.field(default=300, validator=attrs.validators.ge(1))
+    batch_step_multiplier: float = attrs.field(
+        default=1.4, validator=attrs.validators.gt(0)
+    )
+    batch_step_epoch_expon: float = attrs.field(
+        default=2.0, validator=attrs.validators.gt(0)
+    )
+    batch_max_size: int = attrs.field(default=1000, validator=attrs.validators.ge(1))
+    dataloader_workers: int = attrs.field(default=1, validator=attrs.validators.ge(1))
+    optim_lr: float = attrs.field(default=1e-3, validator=attrs.validators.gt(0))
+    batch_test_size: int = attrs.field(default=2000, validator=attrs.validators.ge(1))
+    device: str = attrs.field(
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        validator=attrs.validators.in_(["cpu", "cuda"]),
+    )
+    verbose: int = 1
 
-    def fit(self, x_train, y_train):
-        if self.device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.device = torch.device(self.device)
+    # Non-init fields
+    x_dim: Optional[int] = attrs.field(init=False, default=None)
+    y_dim: Optional[int] = attrs.field(init=False, default=None)
+    neural_net: Optional[nn.Module] = attrs.field(init=False, default=None)
+    epoch_count: int = attrs.field(init=False, default=0)
+    index_train: Optional[np.ndarray] = attrs.field(init=False, default=None)
+    index_val: Optional[np.ndarray] = attrs.field(init=False, default=None)
+    best_loss_val: float = attrs.field(init=False, default=np.inf)
+    loss_history_validation: list = attrs.field(init=False, factory=list)
+    loss_history_train: list = attrs.field(init=False, factory=list)
+    actual_optim_lr: Optional[float] = attrs.field(init=False, default=None)
+
+    @staticmethod
+    def _numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
+        arr = np.array(arr, dtype="f4")
+        arr = torch.from_numpy(arr)
+        return arr
+
+    def fit(self, x_train: np.ndarray, y_train: np.ndarray) -> "NNPredict":
 
         self.x_dim = x_train.shape[1]
         if len(y_train.shape) == 1:
@@ -124,19 +142,10 @@ class NNPredict(BaseEstimator):
 
         return self.improve_fit(x_train, y_train, self.nepoch)
 
-    def improve_fit(self, x_train, y_train, nepoch=1):
+    def improve_fit(self, x_train: np.ndarray, y_train: np.ndarray, nepoch: int = 1) -> "NNPredict":
         if len(y_train.shape) == 1:
             y_train = y_train[:, None]
         criterion = nn.MSELoss()
-
-        assert self.batch_initial >= 1
-        assert self.batch_step_multiplier > 0
-        assert self.batch_step_epoch_expon > 0
-        assert self.batch_max_size >= 1
-        assert self.batch_test_size >= 1
-
-        assert self.num_layers >= 0
-        assert self.hidden_size > 0
 
         inputv_train = np.array(x_train, dtype="f4")
         target_train = np.array(y_train, dtype="f4")
@@ -161,14 +170,10 @@ class NNPredict(BaseEstimator):
             inputv_train = inputv_train[index_train]
             target_train = target_train[index_train]
 
-            self.best_loss_val = np.inf
             es_tries = 0
             range_epoch = itertools.count()  # infty iterator
 
-            self.loss_history_validation = []
-
         batch_max_size = min(self.batch_max_size, inputv_train.shape[0])
-        self.loss_history_train = []
 
         start_time = time.time()
 
@@ -283,7 +288,7 @@ class NNPredict(BaseEstimator):
 
         return self
 
-    def _one_epoch(self, is_train, data_loader, optimizer, criterion):
+    def _one_epoch(self, is_train: bool, data_loader: data.DataLoader, optimizer: optimm, criterion: nn.Module) -> float:
         with torch.set_grad_enabled(is_train):
             loss_vals = []
             batch_sizes = []
@@ -324,7 +329,7 @@ class NNPredict(BaseEstimator):
 
             return avgloss
 
-    def score(self, x_test, y_test):
+    def score(self, x_test: np.ndarray, y_test: np.ndarray) -> float:
         if len(y_test.shape) == 1:
             y_test = y_test[:, None]
 
@@ -358,7 +363,7 @@ class NNPredict(BaseEstimator):
 
             return -1 * np.average(loss_vals, weights=batch_sizes)
 
-    def predict(self, x_pred):
+    def predict(self, x_pred: np.ndarray) -> np.ndarray:
         with torch.no_grad():
             self.neural_net.eval()
             inputv = self._numpy_to_tensor(x_pred)
@@ -368,7 +373,7 @@ class NNPredict(BaseEstimator):
 
             return output_pred.data.cpu().numpy()
 
-    def _construct_neural_net(self):
+    def _construct_neural_net(self) -> None:
         class NeuralNet(nn.Module):
             def __init__(self, x_dim, y_dim, num_layers, hidden_size, convolutional):
                 super(NeuralNet, self).__init__()

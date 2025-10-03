@@ -12,14 +12,11 @@ warnings.filterwarnings(action="ignore", category=DataConversionWarning)
 class QuadReg(BaseEstimator):
     def fit(self, x, y):
         x2 = np.square(x)
-
         self.model = LinearRegression().fit(x2.reshape(-1, 1), y)
-
         return self
 
     def predict(self, x):
         x2 = np.square(x)
-
         return self.model.predict(x2)
 
 

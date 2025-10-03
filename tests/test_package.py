@@ -20,19 +20,22 @@ class TestNNStacking(unittest.TestCase):
         ]
 
     def test_nns(self):
-        """Test the NNS class."""
-        model = NNS(
-            estimators=self.estimators,
-            num_layers=1,
-            hidden_size=10,
-            es=False,
-            nepoch=2,
-        )
-        model.fit(self.x_train, self.y_train)
-        predictions = model.predict(self.x_test)
-        self.assertEqual(predictions.shape, (self.n_test, 1))
-        score = model.score(self.x_test, self.y_test)
-        self.assertFalse(np.isnan(score))
+        """Test the NNS class with different ensemble methods."""
+        for method in ["UNNS", "CNNS"]:
+            with self.subTest(method=method):
+                model = NNS(
+                    estimators=self.estimators,
+                    ensemble_method=method,
+                    num_layers=1,
+                    hidden_size=10,
+                    es=True,
+                    nepoch=2,
+                )
+                model.fit(self.x_train, self.y_train)
+                predictions = model.predict(self.x_test)
+                self.assertEqual(predictions.shape, (self.n_test, 1))
+                score = model.score(self.x_test, self.y_test)
+                self.assertFalse(np.isnan(score))
 
     def test_nnpredict(self):
         """Test the NNPredict class."""
@@ -60,4 +63,10 @@ class TestNNStacking(unittest.TestCase):
         self.assertFalse(np.isnan(score))
 
 if __name__ == '__main__':
+    import torch.multiprocessing as mp
+    try:
+        mp.set_start_method('spawn')
+    except RuntimeError:
+        # The start method can only be set once.
+        pass
     unittest.main()

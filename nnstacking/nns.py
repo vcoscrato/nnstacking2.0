@@ -1,29 +1,31 @@
 import torch
-from torch.utils import data
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils import data
+from torch.optim import Adamax as optimm
 
-import numpy as np
-from time import time
-import itertools
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import ShuffleSplit, KFold
 
-from sklearn import linear_model
-
-import multiprocessing as mp
+import attrs
+import itertools
+import numpy as np
+from time import time
 from copy import deepcopy
+import multiprocessing as mp
+from typing import Any, List, Optional, Union
 
-from torch.optim import Adamax as optimm
+
+def _splitter_validator(instance, attribute, value):
+    if isinstance(value, int):
+        if value < 2:
+            raise ValueError(
+                f"'{attribute.name}' must be >= 2 if it is an integer, but got {value}"
+            )
 
 
+@attrs.define
 class NNS(BaseEstimator):
-    @staticmethod
-    def _numpy_to_tensor(arr):
-        arr = np.array(arr, dtype="f4")
-        arr = torch.from_numpy(arr)
-        return arr
-
     """
     Stacks many estimators using deep foward neural networks.
 
@@ -36,10 +38,6 @@ class NNS(BaseEstimator):
         "UNNS" for features to directly to weights.
     ensemble_addition : bool
         Additional output from the neural network to the ensembler.
-    splitter : object
-        Chooses the splitting of data to generate the predictions of the estimators. Must be an instance of a class from sklearn.model_selection (or behave similatly), defaults to "ten-fold".
-    nworkers : integer
-        Number of worker processes to use for parallel fitting the models. If None, then will use all cpus in the machine.
 
     num_layers : integer
         Number of hidden layers for the neural network. If set to 0, then it degenerates to linear regression.
@@ -50,6 +48,23 @@ class NNS(BaseEstimator):
     nn_weight_decay : object
         Mulplier for penalizaing the size of neural network weights. This penalization occurs for training only (does not affect score method nor validation of early stopping).
 
+    splitter : object
+        Chooses the splitting of data to generate the predictions of the estimators. Must be an instance of a class from sklearn.model_selection (or behave similatly), defaults to "ten-fold".
+    optim_lr: float
+        The initial learning rate.
+    nepoch : integer
+        Number of epochs to run. Ignored if es == True.
+    batch_initial : integer
+        Initial batch size.
+    batch_step_multiplier : float
+        See batch_inital.
+    batch_step_epoch_expon : float
+        See batch_inital.
+    batch_max_size : float
+        See batch_inital.
+    verbose : integer
+        Level verbosity. Set to 0 for silent mode.
+
     es : bool
         If true, then will split the training set into training and validation and calculate the validation internally on each epoch and check if the validation loss increases or not.
     es_validation_set : float
@@ -59,87 +74,89 @@ class NNS(BaseEstimator):
     es_splitter_random_state : float
         Random state to split the dataset into training and validation.
 
-    nepoch : integer
-        Number of epochs to run. Ignored if es == True.
-
-    batch_initial : integer
-        Initial batch size.
-    batch_step_multiplier : float
-        See batch_inital.
-    batch_step_epoch_expon : float
-        See batch_inital.
-    batch_max_size : float
-        See batch_inital.
-
+    device : str
+        Device to use for computation, e.g. "cpu" or "cuda". If None, will auto-detect.
+    nworkers : integer
+        Number of worker processes to use for parallel fitting the models. If None, then will use all cpus in the machine.
     batch_test_size : integer
         Size of the batch for validation and score methods.
         Does not affect training efficiency, usefull when there's
         little GPU memory.
-    device : str
-        Device to use for computation, e.g. "cpu" or "cuda". If None, will auto-detect.
-    verbose : integer
-        Level verbosity. Set to 0 for silent mode.
     """
 
-    def __init__(
-        self,
-        estimators=None,
-        ensemble_method="CNNS",
-        ensemble_addition=True,
-        splitter=10,
-        nworkers=1,
-        num_layers=3,
-        hidden_size=100,
-        criterion=None,
-        nn_weight_decay=0,
-        es=True,
-        es_validation_set=0.1,
-        es_give_up_after_nepochs=50,
-        es_splitter_random_state=0,
-        nepoch=200,
-        batch_initial=200,
-        batch_step_multiplier=1.1,
-        batch_step_epoch_expon=1.4,
-        batch_max_size=1000,
-        optim_lr=1e-3,
-        batch_test_size=2000,
-        device=None,
-        verbose=1,
-    ):
-        for prop in dir():
-            if prop != "self":
-                setattr(self, prop, locals()[prop])
-        self.device = device
+    # NNS parameters
+    estimators: List[Any]
+    ensemble_method: str = attrs.field(
+        default="CNNS", validator=attrs.validators.in_(["CNNS", "UNNS"])
+    )
+    ensemble_addition: bool = True
 
-    def _check_dims(self, x_tc, y_tc):
+    ## NNS architecture
+    num_layers: int = attrs.field(default=3, validator=attrs.validators.ge(0))
+    hidden_size: int = attrs.field(default=100, validator=attrs.validators.gt(0))
+    criterion: Any = attrs.field(factory=nn.MSELoss)
+    nn_weight_decay: float = attrs.field(default=0.0, validator=attrs.validators.ge(0))
+
+    # Treiner parameters
+    splitter: Union[int, Any] = attrs.field(default=10, validator=_splitter_validator)
+    optim_lr: float = attrs.field(default=1e-3, validator=attrs.validators.gt(0))
+    nepoch: int = attrs.field(default=200, validator=attrs.validators.ge(0))
+    batch_initial: int = attrs.field(default=200, validator=attrs.validators.ge(1))
+    batch_step_multiplier: float = attrs.field(
+        default=1.1, validator=attrs.validators.gt(0)
+    )
+    batch_step_epoch_expon: float = attrs.field(
+        default=1.4, validator=attrs.validators.gt(0)
+    )
+    batch_max_size: int = attrs.field(default=1000, validator=attrs.validators.ge(1))
+    verbose: int = 1
+
+    # Early-stopping parameters
+    es: bool = True
+    es_validation_set: float = attrs.field(
+        default=0.1,
+        validator=attrs.validators.and_(attrs.validators.gt(0), attrs.validators.lt(1)),
+    )
+    es_give_up_after_nepochs: int = attrs.field(
+        default=50, validator=attrs.validators.gt(0)
+    )
+    es_splitter_random_state: int = 0
+
+    # Hardware config
+    device: str = attrs.field(
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        validator=attrs.validators.in_(["cpu", "cuda"]),
+    )
+    nworkers: int = attrs.field(default=1, validator=attrs.validators.ge(1))
+    batch_test_size: int = attrs.field(default=2000, validator=attrs.validators.ge(1))
+
+    # Non-init fields
+    x_dim: Optional[int] = attrs.field(init=False, default=None)
+    y_dim: Optional[int] = attrs.field(init=False, default=None)
+    neural_net: Optional[nn.Module] = attrs.field(init=False, default=None)
+
+    @staticmethod
+    def _numpy_to_tensor(arr):
+        arr = np.array(arr, dtype="f4")
+        arr = torch.from_numpy(arr)
+        return arr
+
+    @staticmethod
+    def _check_dims(x_tc, y_tc):
         if len(x_tc.shape) == 1 or len(y_tc.shape) == 1:
             raise ValueError(
-                "x and y must have shape (s, f) "
-                "where s is the sample size and "
-                "f is the number of features"
+                "x and y must have shape (n, p) "
+                "where n is the sample size and "
+                "p is the number of features"
             )
 
     def fit(self, x_train, y_train, predictions=None):
-        if self.device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.device = torch.device(self.device)
-
         self._check_dims(x_train, y_train)
 
         self.x_dim = x_train.shape[1]
         self.y_dim = y_train.shape[1]
         self.epoch_count = 0
         self.nobs = x_train.shape[0]
-
-        if self.criterion is None:
-            self.criterion = nn.MSELoss()
-
-        if self.estimators is None:
-            self.estimators = [
-                linear_model.LinearRegression(),
-                linear_model.Lasso(),
-                linear_model.Ridge(),
-            ]
 
         self.est_dim = len(self.estimators)
         self._construct_neural_net()
@@ -218,17 +235,6 @@ class NNS(BaseEstimator):
 
     def improve_fit(self, x_train, y_train, nepoch):
         self._check_dims(x_train, y_train)
-        assert self.batch_initial >= 1
-        assert self.batch_step_multiplier > 0
-        assert self.batch_step_epoch_expon > 0
-        assert self.batch_max_size >= 1
-        assert self.batch_test_size >= 1
-
-        assert self.nn_weight_decay >= 0
-
-        assert self.num_layers >= 0
-        assert self.hidden_size > 0
-
         nnx_train = np.array(x_train, dtype="f4")
         nny_train = np.array(y_train, dtype="f4")
         nnpred_train = np.array(self.predictions, dtype="f4")
@@ -252,7 +258,7 @@ class NNS(BaseEstimator):
 
             self.best_loss_val = np.inf
             es_tries = 0
-            range_epoch = itertools.count()  # infty iterator
+            range_epoch = itertools.count()
             self.loss_history_validation = []
 
         batch_max_size = min(self.batch_max_size, nnx_train.shape[0])
@@ -355,8 +361,6 @@ class NNS(BaseEstimator):
 
                 self.epoch_count += 1
             except RuntimeError:
-                # if self.epoch_count == 0:
-                #    raise err
                 if self.verbose >= 2:
                     print(
                         "Runtime error problem probably due to", "high learning rate."
@@ -447,7 +451,6 @@ class NNS(BaseEstimator):
             evec = output.new_ones(self.est_dim)[:, None]
             for i in range(output.shape[0]):
                 div_res = output[i]
-                # output[i] = output[i].potri()
                 div_res = div_res.tril()
                 div_res = torch.mm(div_res, div_res.t())
                 numerator = torch.mm(div_res, evec)
@@ -598,8 +601,6 @@ class NNS(BaseEstimator):
         elif self.ensemble_method == "CNNS":
             output_dim = self.est_dim**2
             softmax = True
-        else:
-            raise ValueError("ensemble_method must be UNNS or CNNS")
         if self.ensemble_addition:
             output_dim += 1
         output_hl_size = int(self.hidden_size)
@@ -612,7 +613,6 @@ class NNS(BaseEstimator):
         if "neural_net" in d:
             d["neural_net_params"] = d["neural_net"].state_dict()
             del d["neural_net"]
-        # Delete phi_grid (will recreate on load)
         if hasattr(self, "phi_grid"):
             del d["phi_grid"]
             d["y_grid"] = None

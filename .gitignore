@@ -5,3 +5,4 @@ dist/*
 *.egg-info/
 MANIFEST
 nnstacking.egg-info
+paper.pdf

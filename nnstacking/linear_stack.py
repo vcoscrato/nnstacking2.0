@@ -19,8 +19,11 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import cross_val_predict
 from scipy.optimize import nnls
+import attrs
+from typing import List, Any, Optional
 
 
+@attrs.define
 class LinearStack(BaseEstimator):
     """
     Stacks many estimators using Breiman Stacking.
@@ -32,11 +35,12 @@ class LinearStack(BaseEstimator):
     verbose : integer
         Level verbosity. Set to 0 for silent mode.
     """
+    estimators: List[Any] = attrs.field(factory=list)
+    verbose: int = 1
 
-    def __init__(self, estimators=None, verbose=1):
-        for prop in dir():
-            if prop != "self":
-                setattr(self, prop, locals()[prop])
+    # Non-init fields
+    parameters: Optional[np.ndarray] = attrs.field(init=False, default=None)
+    train_mse: Optional[float] = attrs.field(init=False, default=None)
 
     """
     Fit models and Breiman Stacking coefficients.
