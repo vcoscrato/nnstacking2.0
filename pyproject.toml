@@ -1,0 +1,29 @@
+[project]
+name = "nnstacking"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scikit-learn",
+    "scipy",
+    "torch",
+    "torchvision",
+    "torchaudio",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-nightly-cu130" }]
+torchvision = [{ index = "pytorch-nightly-cu130" }]
+torchaudio = [{ index = "pytorch-nightly-cu130" }]
+
+[[tool.uv.index]]
+name = "pytorch-nightly-cu130"
+url = "https://download.pytorch.org/whl/nightly/cu130"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.3",
+]

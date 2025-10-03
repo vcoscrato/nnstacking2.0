@@ -1,24 +1,25 @@
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 # Copyright 2018 Victor Coscrato <vcoscrato@gmail.com>;
 # Copyright 2018 Marco Inacio <pythonpackages@marcoinacio.com>
 #
-#This program is free software: you can redistribute it and/or modify
-#it under the terms of the GNU General Public License as published by
-#the Free Software Foundation, version 3 of the License.
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3 of the License.
 
-#This program is distributed in the hope that it will be useful,
-#but WITHOUT ANY WARRANTY; without even the implied warranty of
-#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.    See the
-#GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.    See the
+# GNU General Public License for more details.
 
-#You should have received a copy of the GNU General Public License
-#along with this program. If not, see <http://www.gnu.org/licenses/>.
-#----------------------------------------------------------------------
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+# ----------------------------------------------------------------------
 
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import cross_val_predict
 from scipy.optimize import nnls
+
 
 class LinearStack(BaseEstimator):
     """
@@ -31,7 +32,8 @@ class LinearStack(BaseEstimator):
     verbose : integer
         Level verbosity. Set to 0 for silent mode.
     """
-    def __init__(self, estimators = None, verbose = 1):
+
+    def __init__(self, estimators=None, verbose=1):
         for prop in dir():
             if prop != "self":
                 setattr(self, prop, locals()[prop])
@@ -52,28 +54,27 @@ class LinearStack(BaseEstimator):
         estimators passed to constructor will not be trained, i.e.
         you must train them before!
     """
-    def fit(self, x_train, y_train, predictions=None):
 
+    def fit(self, x_train, y_train, predictions=None):
         if predictions is not None:
-            assert(predictions.shape == (len(x_train), len(self.estimators)))
+            assert predictions.shape == (len(x_train), len(self.estimators))
 
         else:
-            predictions = np.empty((len(train), len(base_est)))
+            predictions = np.empty((len(x_train), len(self.estimators)))
             for i, est in enumerate(self.estimators):
                 if self.verbose > 1:
-                    print('Cross-validating: ', est)
-                predictions[:, i] = cross_val_predict(est, x[train], y[train], cv=2)
+                    print("Cross-validating: ", est)
+                predictions[:, i] = cross_val_predict(est, x_train, y_train.ravel(), cv=2)
                 if self.verbose > 1:
-                    print('Estimating: ', self.estimators[i])
-                est.fit(x[train], y[train])
-                cv_predictions[test, i] = est.predict(x[test])
+                    print("Estimating: ", self.estimators[i])
+                est.fit(x_train, y_train.ravel())
 
         adj = nnls(predictions, y_train.reshape(-1))
         self.parameters = adj[0]
-        self.train_mse = adj[1]/len(y_train)
+        self.train_mse = adj[1] / len(y_train)
 
         if self.verbose > 0:
-            print('Ensemble fitted MSE (train): ', self.train_mse/len(y_train))
+            print("Ensemble fitted MSE (train): ", self.train_mse / len(y_train))
 
         return self
 
@@ -85,6 +86,7 @@ class LinearStack(BaseEstimator):
     x : array
         Matrix of features
     """
+
     def predict(self, x):
         predictions = np.empty((len(x), len(self.estimators)))
         for i, est in enumerate(self.estimators):
@@ -106,5 +108,6 @@ class LinearStack(BaseEstimator):
     y : array
         Vector of response variable.
     """
+
     def score(self, x, y):
         return np.mean(np.square(self.predict(x) - np.array(y)))

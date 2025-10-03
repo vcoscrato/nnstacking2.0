@@ -1,5 +1,7 @@
+.ruff_cache
 *.pyc
 build/*
 dist/*
 *.egg-info/
 MANIFEST
+nnstacking.egg-info
